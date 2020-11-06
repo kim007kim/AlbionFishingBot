@@ -10,17 +10,24 @@ import pyautogui
 import cv2
 import sys
 import os
+import psutil
+import win32gui
+import win32api
+import win32con
 from PIL import ImageGrab
 
 while True:
     # Initialize Bot
+    albion = win32gui.FindWindow(0,'Albion Online Client')
+    albionpos = win32gui.GetWindowRect(albion)
+    print('HWND: ', albion, '\tPos: ',albionpos)    
     maxValue = 2**14
     bars = 35
     p=pyaudio.PyAudio()
 
-    #要找查的設備名稱中的關鍵字
+    # Find the name of the speaker. Stereo problably
     target = '立體聲混音'
-    #逐一查找聲音設備  
+    # Find the name  
     for i in range(p.get_device_count()):
         devInfo = p.get_device_info_by_index(i)   
         if devInfo['name'].find(target)>=0 and devInfo['hostApi'] == 0 :      
@@ -47,7 +54,7 @@ while True:
             fishX.append(x)
             fishY.append(y)
             print("add point [%d], [%d]"%(x,y))
-            time.sleep(1.0)
+            time.sleep(0.5)
         
         if keyboard.is_pressed('F10'):
             if fishpoint<1:
@@ -58,11 +65,14 @@ while True:
             break
         
     while True:
+        print('CPU: ',psutil.cpu_percent())
+        print('CPU Details: ',psutil.cpu_freq(percpu=True))
+        print('Memory: ',psutil.virtual_memory().percent)
         print('New round, cast rod                             ', end = ' \r')
         playerexist = False
         while True:
             print('Player detecting                            ', end = ' \r')
-            capture = np.array(ImageGrab.grab(bbox=(50, 50, 1870, 1030)))  # Left, Upper, Right, Lower
+            capture = np.array(ImageGrab.grab(bbox=(50, 70, 1870, 1030)))  # Left, Upper, Right, Lower
             capture_R, capture_G, capture_B = cv2.split(capture)
             res = cv2.matchTemplate(capture_B,img_B,cv2.TM_CCOEFF_NORMED)
             loc = np.where(res >= thresholdB)
@@ -87,19 +97,25 @@ while True:
                 time.sleep(random.uniform(20, 60))
             break
         fishpointselect = random.randint(0,fishpoint-1)
-        pyautogui.moveTo(fishX[fishpointselect], fishY[fishpointselect])
+        pyautogui.moveTo(fishX[fishpointselect]+random.randint(-5,5), fishY[fishpointselect]+random.randint(-5,5))
         inp.cast_rod()
         over = False
         time.sleep(1.3)
         print('start to detect sound')
         stream=p.open(input_device_index=dev_idx,format=pyaudio.paInt16,channels=2,rate=44100, input=True, frames_per_buffer=1024)
         previoussum = 0
+        count = 0
+        chunkcount = 0
         while True:
             print('Sound detecting                          ', end = ' \r')
             data = np.frombuffer(stream.read(4096),dtype=np.int16)
             volume = int(np.abs(np.max(data)-np.min(data))*bars/maxValue)
+            if volume>0:
+                chunkcount = chunkcount+1
+            elif previoussum==0:
+                chunkcount = 0
             starString = "#"*volume+"-"*int(bars-volume)
-            print("Vulume=[%s]"%(starString))
+            print("Volume=[%s]"%(starString))
             #data = np.frombuffer(stream.read(1024),dtype=np.int16)
             #dataL = data[0::2]
             #dataR = data[1::2]
@@ -111,9 +127,11 @@ while True:
             #volume = int(peakL*bars + peakR*bars)
             if keyboard.is_pressed('F12'):
                 break
-            
-            if volume>=6 or volume+previoussum>=8:
-                if volume>=9:
+            count = count + 1
+            if count > 1000:
+                break
+            if volume>=6 or volume+previoussum>=9:
+                if volume>=9 and chunkcount>3:
                     continue
                 stream.stop_stream()
                 stream.close()
@@ -132,13 +150,18 @@ while True:
 
                     if position < 137:
                         inp.hold()  
-                        time.sleep(random.uniform(0.1, 0.2))
-                    elif position > 142:
+                        time.sleep(random.uniform(0.1, 0.15))
+                    elif position > 145:
                         inp.release()  
-                        time.sleep(random.uniform(0.03, 0.08))
-                    elif position < 142:
+                        time.sleep(random.uniform(0.005, 0.025))
                         inp.hold()
-                        time.sleep(random.uniform(0.0, 0.1))
+                        time.sleep(random.uniform(0.02, 0.03))
+                        inp.release()  
+                        time.sleep(random.uniform(0.005, 0.025))
+                    elif position < 145:
+                        inp.hold()
+                        time.sleep(random.uniform(0.03, 0.08))
+                        inp.release() 
             previoussum = volume
             if over==True:
                 for i in range(30):
